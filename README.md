@@ -1,113 +1,102 @@
-# MedGraph — AI-Based Healthcare Journey Reconstruction
+# MedGraph AI
 
-> "Don't just store the medical record. Understand what happened next."
+**AI-Based Healthcare Journey Reconstruction**
 
-**Research prototype for reconstructing patient healthcare journeys from fragmented medical records.**
+MedGraph is a research prototype that reconstructs a patient's healthcare journey from fragmented medical records. It takes raw medical documents (PDFs, images) and uses OCR + AI to extract events, map them to a timeline, identify conflicts or missing follow-ups, and provides a RAG interface to "chat" with the medical records.
 
-## Research Question
+---
 
-*"Can AI reconstruct a patient's healthcare journey from fragmented medical records and reliably identify important changes, conflicting information, and missing follow-up evidence?"*
+## 🚀 Prerequisites
 
-## What MedGraph Does
+- **Python 3.10+** (For the FastAPI backend and AI pipelines)
+- **Node.js v18+** (For the React/Vite frontend)
+- **Git**
 
-MedGraph ingests fragmented medical records (e.g., consultation notes, lab results, prescriptions) and applies NLP techniques to extract structured healthcare events. It then reconstructs the patient's temporal healthcare journey and uses a rules-based and AI-assisted signal engine to detect discrepancies, missing follow-ups, and significant longitudinal trends.
+---
 
-## What MedGraph Is NOT
+## 🔐 Environment Variables
 
-- It is NOT an Electronic Health Record (EHR) system.
-- It is NOT a diagnostic tool.
-- It is NOT a substitute for professional medical judgment.
+Before running the application, you must set up your environment secrets. A template file is provided.
 
-## Core Pipeline
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+2. Copy the template file to create your active `.env` file:
+   ```bash
+   cp .env.demo .env
+   # Or on Windows: copy .env.demo .env
+   ```
+3. Open `backend/.env` and add your secrets. The most critical is your OpenAI API key for event extraction and RAG capabilities:
+   ```env
+   OPENAI_API_KEY=sk-your-openai-api-key-here
+   ```
+   *(Note: The system gracefully falls back to keyword searches and mock data responses if the API key is invalid, but full functionality requires a real key).*
 
-```mermaid
-graph TD
-    A[Medical Documents] --> B[Text Extraction]
-    B --> C[Event Extraction]
-    C --> D[Normalized Events]
-    D --> E[Temporal Ordering]
-    E --> F[Relationship Detection]
-    F --> G[Reconciliation]
-    G --> H[Signal Engine]
-    H --> I[Evidence Linking]
-    I --> J[Human Verification]
-```
+---
 
-## Signal Types
+## 🛠️ Local Setup
 
-| Signal | Description | Example |
-|--------|-------------|--------|
-| Medication Inconsistency | Identifies discrepancies in medication records over time. | Metformin discontinued then appears active. |
-| Conflicting Information | Highlights contradictions within the patient's record. | Penicillin allergy vs "No known drug allergies". |
-| Missing Follow-up Evidence | Flags when recommended follow-ups or tests lack subsequent evidence. | MRI recommended but no MRI report exists. |
-| Longitudinal Change | Detects significant trends in longitudinal lab data. | Progressively increasing HbA1c levels. |
+### 1. Backend Setup
 
-## Technology Stack
-
-| Component | Technology |
-|-----------|------------|
-| Backend | FastAPI (Python) |
-| Database | PostgreSQL + pgvector |
-| Frontend | React / Next.js |
-| AI Integration | OpenAI GPT-4o (or Mock) |
-| Containerization | Docker + Docker Compose |
-
-## Quick Start
+Open a terminal and set up the Python backend:
 
 ```bash
-# Clone and start
-git clone https://github.com/example/medgraph.git
-cd medgraph
-docker compose up --build
+cd backend
+
+# Create and activate a virtual environment
+python -m venv venv
+# Windows:
+.\venv\Scripts\activate
+# Mac/Linux:
+source venv/bin/activate
+
+# Install dependencies (FastAPI, PaddleOCR, OpenAI, etc.)
+pip install -r requirements.txt
+
+# Seed the database with the initial demo data
+python -m app.seed
+
+# Start the backend server
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Open http://localhost:3000 (or http://localhost for Nginx proxy)
+The backend API will be running at `http://localhost:8000`.
 
-Demo credentials:
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@medgraph.dev | MedGraph2026! |
-| Clinician | clinician@medgraph.dev | MedGraph2026! |
-| Patient | patient@medgraph.dev | MedGraph2026! |
+### 2. Frontend Setup
 
-## Architecture
-
-Please see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture diagrams.
-
-## Database Schema
-
-- `User`: Application users (Admin, Clinician, etc.)
-- `Patient`: Patient demographics.
-- `Document`: Uploaded medical documents.
-- `Event`: Extracted healthcare events (consultations, labs).
-- `Relationship`: Links between events.
-- `Signal`: Detected clinical signals and discrepancies.
-
-## Running Tests
+Open a new terminal and set up the React frontend:
 
 ```bash
-make test
-# OR
-cd backend && pytest
-cd frontend && npm test
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
 ```
 
-## Research Evaluation
+The frontend will start on `http://localhost:5173` (or 5174 if the port is busy).
 
-Evaluated against a synthetic benchmark of 100+ healthcare events. See [data/benchmark/ground_truth.json](data/benchmark/ground_truth.json).
+---
 
-## Known Limitations
+## 🩺 Using the App
 
-- OCR extraction errors can propagate into incorrect events.
-- Entity resolution for medications requires sophisticated medical ontologies (currently mock/simplified).
-- Temporal reasoning is challenging with ambiguous dates.
+1. Open your browser and navigate to the frontend URL (e.g., `http://localhost:5173`).
+2. Log in using the seeded demo credentials:
+   - **Email:** `admin@medgraph.dev`
+   - **Password:** `MedGraph2026!`
+3. Explore the **Dashboard**, view the patient **Timeline**, interact with the knowledge **Graph**, and test the **Ask MedGraph** feature!
 
-## Future Work
+---
 
-- Integration with standard ontologies (SNOMED CT, RxNorm).
-- Advanced graph neural networks for relationship detection.
-- Scalability testing on large cohorts.
+## 🐳 Docker Deployment (Optional)
 
-## Privacy & Safety
+If you prefer to run the entire stack (PostgreSQL + pgvector, Backend, Frontend, Nginx) using Docker:
 
-Data is assumed to be synthetic or fully de-identified. Always ensure compliance with HIPAA/GDPR when handling real PHI.
+```bash
+# Make sure your backend/.env file is configured first!
+docker-compose up -d --build
+```
+This will automatically map the databases and start the app on port `80`.
