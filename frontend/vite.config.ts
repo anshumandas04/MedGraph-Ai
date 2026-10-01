@@ -10,6 +10,10 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: [
+      'plc-testament-stephen-magnetic.trycloudflare.com',
+      '.trycloudflare.com',
+    ],
     proxy: {
       '/api': 'http://localhost:8000'
     }
