@@ -33,7 +33,8 @@ export interface Document {
   original_filename: string;
   document_type: string;
   document_date: string | null;
-  processing_status: 'UPLOADED' | 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  processing_status: 'UPLOADED' | 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'NEEDS_REVIEW' | 'FAILED';
+  processing_error?: string | null;
   file_size: number;
   created_at: string;
 }
@@ -90,6 +91,7 @@ export interface Signal {
   confidence: number;
   status: 'OPEN' | 'VERIFIED' | 'DISMISSED' | 'NEEDS_VERIFICATION';
   evidence: SignalEvidence[];
+  evidence_count?: number;
   created_at: string;
   reviewed_by?: string;
   reviewed_at?: string;
@@ -183,12 +185,14 @@ export interface ResearchDashboard {
 }
 
 export interface EvaluationResult {
-  precision: number;
-  recall: number;
-  f1: number;
-  false_positive_rate: number;
-  evidence_accuracy: number;
+  available: boolean;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+  false_positive_rate: number | null;
+  evidence_accuracy: number | null;
   details: EvaluationDetail[];
+  note?: string;
 }
 
 export interface EvaluationDetail {

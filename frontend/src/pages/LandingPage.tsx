@@ -21,7 +21,7 @@ export const LandingPage: React.FC = () => {
             Intelligent Medical History Timeline
           </h2>
           <p className="text-xl text-slate-600 max-w-3xl mx-auto mb-10">
-            MedGraph uses advanced LLMs to extract, structure, and visualize complex medical histories from raw documents.
+            MedGraph uses local OCR and rule-based extraction to organize information from medical documents.
           </p>
           <Link to="/login"><Button size="lg" className="text-lg px-10">Explore Demo</Button></Link>
         </div>
@@ -33,7 +33,7 @@ export const LandingPage: React.FC = () => {
           </div>
           <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
             <h3 className="text-xl font-bold mb-3">2. Extract Entities</h3>
-            <p className="text-slate-600">LLM pipeline extracts events, medications, and relationships.</p>
+            <p className="text-slate-600">Local rules identify supported events, medications, and relationships.</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
             <h3 className="text-xl font-bold mb-3">3. Visualize Timeline</h3>

@@ -21,7 +21,7 @@ export const TimelinePage: React.FC = () => {
 
   if (!selectedPatientId) return <div>Select a patient</div>;
   if (isLoading) return <div className="space-y-8 p-6"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>;
-  if (error || !data) return <ErrorState />;
+  if (error || !data) return <ErrorState error={error} />;
   if (data.length === 0) return <EmptyState title="No timeline events" description="Upload documents to generate a timeline." />;
 
   const displayData = order === 'desc' ? [...data] : [...data].reverse();

@@ -24,6 +24,17 @@ def validate_mime_type(content_type: str) -> bool:
     allowed_mimes = ['application/pdf', 'image/png', 'image/jpeg']
     return content_type in allowed_mimes
 
+def validate_file_content(filename: str, content: bytes) -> bool:
+    """Check the file signature matches its allowed extension."""
+    ext = get_file_extension(filename)
+    if ext == ".pdf":
+        return content.startswith(b"%PDF-")
+    if ext == ".png":
+        return content.startswith(b"\x89PNG\r\n\x1a\n")
+    if ext in {".jpg", ".jpeg"}:
+        return content.startswith(b"\xff\xd8\xff")
+    return False
+
 def validate_file_size(size: int):
-    if size > getattr(settings, 'MAX_UPLOAD_SIZE', 10 * 1024 * 1024):
+    if size > settings.MAX_FILE_SIZE:
         raise FileValidationError("File too large.")

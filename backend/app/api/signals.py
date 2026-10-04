@@ -15,6 +15,7 @@ from app.db.models.document import Document
 from app.db.models.event import HealthEvent
 from app.db.models.audit import Feedback
 from app.core.security import get_current_user
+from app.core.access import assert_patient_access
 from app.services.signal_service import run_signal_engine
 
 router = APIRouter()
@@ -34,6 +35,7 @@ async def list_signals(
     current_user: User = Depends(get_current_user),
 ):
     """List signals for a patient with optional filters."""
+    await assert_patient_access(patient_id, db, current_user)
     query = select(Signal).where(Signal.patient_id == patient_id)
     if status:
         query = query.where(Signal.status == status)
@@ -110,6 +112,7 @@ async def get_signal(
     signal = result.scalar_one_or_none()
     if not signal:
         raise HTTPException(status_code=404, detail="Signal not found")
+    await assert_patient_access(signal.patient_id, db, current_user)
 
     ev_result = await db.execute(
         select(SignalEvidence).where(SignalEvidence.signal_id == signal_id)
@@ -172,6 +175,7 @@ async def review_signal(
     signal = result.scalar_one_or_none()
     if not signal:
         raise HTTPException(status_code=404, detail="Signal not found")
+    await assert_patient_access(signal.patient_id, db, current_user, write=True)
 
     status_map = {
         "VERIFY": "VERIFIED",
@@ -206,6 +210,7 @@ async def detect_signals(
     current_user: User = Depends(get_current_user),
 ):
     """Run signal engine for a patient."""
+    await assert_patient_access(patient_id, db, current_user, write=True)
     signals = await run_signal_engine(db, patient_id)
     await db.flush()
     return {

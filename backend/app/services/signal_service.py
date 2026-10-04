@@ -12,7 +12,7 @@ Language is always hedged — never diagnostic.
 import uuid
 from datetime import date, timedelta
 from typing import Optional
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.event import HealthEvent, EventRelationship
@@ -109,7 +109,7 @@ async def detect_conflicting_information(db: AsyncSession, patient_id: uuid.UUID
         select(HealthEvent)
         .where(
             HealthEvent.patient_id == patient_id,
-            HealthEvent.event_type.in_(["DIAGNOSIS_DOCUMENTED", "SYMPTOM_DOCUMENTED", "CONSULTATION", "OTHER"])
+            HealthEvent.event_type.in_(["DIAGNOSIS_DOCUMENTED", "SYMPTOM_DOCUMENTED", "CONSULTATION", "OTHER", "ALLERGY_REPORTED", "ALLERGY_STATUS_REPORTED"])
         )
         .order_by(HealthEvent.event_date)
     )
@@ -128,9 +128,9 @@ async def detect_conflicting_information(db: AsyncSession, patient_id: uuid.UUID
             allergy_records.append((combined, event))
     
     # Check for NKDA vs specific allergy
-    has_nkda = [(text, ev) for text, ev in allergy_records if "nkda" in text or "no known drug allerg" in text]
+    has_nkda = [(text, ev) for text, ev in allergy_records if ev.event_type == "ALLERGY_STATUS_REPORTED" or "nkda" in text or "no known drug allerg" in text]
     has_specific = [(text, ev) for text, ev in allergy_records 
-                    if any(drug in text for drug in ["penicillin", "sulfa", "aspirin", "ibuprofen", "codeine", "morphine"])
+                    if ev.event_type == "ALLERGY_REPORTED" or any(drug in text for drug in ["penicillin", "sulfa", "aspirin", "ibuprofen", "codeine", "morphine"])
                     and "no known" not in text and "nkda" not in text]
     
     if has_nkda and has_specific:
@@ -357,8 +357,14 @@ async def detect_longitudinal_changes(db: AsyncSession, patient_id: uuid.UUID) -
 
 
 async def run_signal_engine(db: AsyncSession, patient_id: uuid.UUID) -> list[Signal]:
-    """Run all signal detectors for a patient."""
+    """Recompute unreviewed derived signals without duplicating prior runs."""
     logger.info("Running signal engine", patient_id=str(patient_id))
+
+    existing = await db.execute(select(Signal.id).where(Signal.patient_id == patient_id, Signal.status == "OPEN"))
+    existing_ids = [row[0] for row in existing.all()]
+    if existing_ids:
+        await db.execute(delete(SignalEvidence).where(SignalEvidence.signal_id.in_(existing_ids)))
+        await db.execute(delete(Signal).where(Signal.id.in_(existing_ids)))
     
     all_signals = []
     all_signals.extend(await detect_medication_inconsistencies(db, patient_id))

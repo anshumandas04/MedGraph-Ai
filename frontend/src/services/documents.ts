@@ -20,6 +20,12 @@ export const documentsService = {
     });
     return response.data;
   },
+  deleteDocument: async (id: string): Promise<void> => {
+    await api.delete(`/documents/${id}`);
+  },
+  reprocessDocument: async (id: string): Promise<void> => {
+    await api.post(`/documents/${id}/reprocess`);
+  },
   getDocumentFile: async (id: string): Promise<Blob> => {
     const response = await api.get(`/documents/${id}/file`, {
       responseType: 'blob',

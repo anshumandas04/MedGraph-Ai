@@ -18,7 +18,7 @@ export const SignalsPage: React.FC = () => {
 
   if (!selectedPatientId) return <div>Select a patient</div>;
   if (isLoading) return <div className="space-y-4 p-6"><Skeleton className="h-32 w-full" /></div>;
-  if (error || !data) return <ErrorState />;
+  if (error || !data) return <ErrorState error={error} />;
 
   const openSignals = data.filter(s => s.status === 'OPEN' || s.status === 'NEEDS_VERIFICATION');
   const verifiedSignals = data.filter(s => s.status === 'VERIFIED');
@@ -44,7 +44,7 @@ export const SignalsPage: React.FC = () => {
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">Clinical Signals</h2>
-        <p className="text-slate-500 mt-1">AI-generated alerts for conflicting information or missing follow-ups.</p>
+        <p className="text-slate-500 mt-1">Rule-based review signals for possible conflicts or missing evidence.</p>
       </div>
 
       <Tabs tabs={tabs} />

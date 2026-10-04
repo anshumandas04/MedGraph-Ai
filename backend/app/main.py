@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
-from app.core.logging import configure_logging
+from app.core.logging import configure_logging, request_logging_middleware
 from app.api import auth, users, patients, documents, events, timeline, signals, medications, investigations, search, dashboard, health
 
 app = FastAPI(
@@ -26,6 +26,7 @@ register_exception_handlers(app)
 
 # Configure logging
 configure_logging()
+app.middleware("http")(request_logging_middleware)
 
 @app.on_event("startup")
 async def startup_event():

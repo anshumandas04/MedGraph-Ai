@@ -1,8 +1,6 @@
 """Dashboard API routes."""
 import uuid
-import json
-import os
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,12 +8,30 @@ from app.db.session import get_db
 from app.db.models.user import User
 from app.db.models.document import Document
 from app.db.models.event import HealthEvent
-from app.db.models.signal import Signal
+from app.db.models.signal import Signal, SignalEvidence
 from app.db.models.medication import Medication
 from app.db.models.investigation import Investigation
 from app.core.security import get_current_user, require_role
+from app.core.access import assert_patient_access
+from app.core.logging import recent_logs
 
 router = APIRouter()
+
+
+@router.get("/admin/logs")
+async def get_application_logs(
+    limit: int = Query(default=100, ge=1, le=500),
+    level: str = Query(default="ALL", pattern="^(ALL|DEBUG|INFO|WARNING|ERROR|CRITICAL)$"),
+    current_user: User = Depends(require_role(["ADMIN"])),
+):
+    """Return recent redacted backend logs to administrators only."""
+    return {
+        "storage": "in-memory",
+        "retained_limit": 2000,
+        "returned": len(recent_logs(limit=limit, level=level)),
+        "logs": recent_logs(limit=limit, level=level),
+        "note": "Logs are held in memory and reset when the backend restarts. Request and application messages omit request bodies and query strings.",
+    }
 
 
 @router.get("/patients/{patient_id}/dashboard")
@@ -25,6 +41,7 @@ async def get_dashboard(
     current_user: User = Depends(get_current_user),
 ):
     """Get patient dashboard data."""
+    await assert_patient_access(patient_id, db, current_user)
     total_docs = (await db.execute(
         select(func.count(Document.id)).where(Document.patient_id == patient_id)
     )).scalar() or 0
@@ -65,8 +82,10 @@ async def get_dashboard(
 
     # Recent signals
     recent_sigs_result = await db.execute(
-        select(Signal)
+        select(Signal, func.count(SignalEvidence.id).label("evidence_count"))
+        .outerjoin(SignalEvidence, SignalEvidence.signal_id == Signal.id)
         .where(Signal.patient_id == patient_id, Signal.status == "OPEN")
+        .group_by(Signal.id)
         .order_by(Signal.created_at.desc())
         .limit(5)
     )
@@ -74,9 +93,10 @@ async def get_dashboard(
         {
             "id": str(s.id), "signal_type": s.signal_type, "title": s.title,
             "severity": s.severity, "confidence": s.confidence, "status": s.status,
+            "evidence_count": evidence_count,
             "created_at": s.created_at.isoformat() if s.created_at else None,
         }
-        for s in recent_sigs_result.scalars().all()
+        for s, evidence_count in recent_sigs_result.all()
     ]
 
     return {
@@ -148,86 +168,14 @@ async def get_evaluation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["ADMIN"])),
 ):
-    """Research evaluation metrics comparing ground truth vs system output."""
-    # Load ground truth
-    gt_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "benchmark", "ground_truth.json")
-    gt_path = os.path.abspath(gt_path)
-
-    if not os.path.exists(gt_path):
-        return {
-            "precision": 0, "recall": 0, "f1": 0,
-            "false_positive_rate": 0, "evidence_accuracy": 0,
-            "details": [],
-            "note": "Ground truth file not found. Run benchmark generation first.",
-        }
-
-    with open(gt_path, "r") as f:
-        ground_truth = json.load(f)
-
-    # Get system signals
-    sig_result = await db.execute(select(Signal))
-    system_signals = sig_result.scalars().all()
-
-    # Get system events
-    event_result = await db.execute(select(HealthEvent))
-    system_events = event_result.scalars().all()
-
-    gt_signals = ground_truth.get("signals", [])
-    gt_events = ground_truth.get("events", [])
-
-    # Calculate metrics for signals
-    tp = 0  # True positives
-    fp = 0  # False positives
-    fn = 0  # False negatives
-
-    details = []
-    gt_signal_types = {s["type"] for s in gt_signals}
-    sys_signal_types = {s.signal_type for s in system_signals}
-
-    for gt_sig in gt_signals:
-        matched = any(
-            s.signal_type == gt_sig["type"]
-            for s in system_signals
-        )
-        if matched:
-            tp += 1
-            details.append({
-                "test_case": gt_sig["type"],
-                "expected": gt_sig["description"],
-                "predicted": gt_sig["description"],
-                "correct": True,
-                "evidence": ", ".join(gt_sig.get("evidence_documents", [])),
-                "confidence": 0.85,
-            })
-        else:
-            fn += 1
-            details.append({
-                "test_case": gt_sig["type"],
-                "expected": gt_sig["description"],
-                "predicted": "Not detected",
-                "correct": False,
-                "evidence": "",
-                "confidence": 0,
-            })
-
-    # Count false positives
-    for sys_sig in system_signals:
-        if not any(gt_sig["type"] == sys_sig.signal_type for gt_sig in gt_signals):
-            fp += 1
-
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-    fpr = fp / (fp + tp) if (fp + tp) > 0 else 0
-
-    # Evidence accuracy (simplified)
-    evidence_accuracy = tp / max(len(gt_signals), 1)
-
+    """Do not report accuracy without human-adjudicated reference labels."""
     return {
-        "precision": round(precision, 3),
-        "recall": round(recall, 3),
-        "f1": round(f1, 3),
-        "false_positive_rate": round(fpr, 3),
-        "evidence_accuracy": round(evidence_accuracy, 3),
-        "details": details,
+        "available": False,
+        "precision": None,
+        "recall": None,
+        "f1": None,
+        "false_positive_rate": None,
+        "evidence_accuracy": None,
+        "details": [],
+        "note": "Evaluation requires human-adjudicated reference labels; no validated labels are configured.",
     }

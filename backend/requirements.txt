@@ -9,9 +9,13 @@ psycopg2-binary==2.9.10
 pgvector==0.3.6
 python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 python-multipart==0.0.20
 PyMuPDF==1.25.5
 Pillow==11.2.1
+python-dateutil>=2.9,<3
+pytesseract>=0.3.13,<1
+openai>=1.90,<3
 httpx==0.28.1
 pytest==8.4.1
 pytest-asyncio==1.0.0

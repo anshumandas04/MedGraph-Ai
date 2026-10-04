@@ -1,158 +1,191 @@
-import os
+"""Local document text extraction.
+
+Text-based PDFs are read with PyMuPDF. Scanned PDFs and images use the locally
+installed Tesseract executable through pytesseract; no document contents leave
+the machine. Missing OCR dependencies produce a visible processing error.
+"""
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from pathlib import Path
+from typing import Any
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class OCRResult:
     text: str
     confidence: float
-    pages: List[Dict[str, Any]]  # [{page_number, text, confidence, blocks: []}]
+    pages: list[dict[str, Any]]
+
+
+class OCRConfigurationError(RuntimeError):
+    """Raised when the requested local OCR provider is not installed/configured."""
+
 
 class OCRProvider(ABC):
     @abstractmethod
     async def extract_text(self, file_path: str) -> OCRResult:
-        pass
+        raise NotImplementedError
 
-class MockOCRProvider(OCRProvider):
-    """Returns pre-configured text for testing/demo fallback."""
+
+class LocalDocumentOCR(OCRProvider):
+    """Extract embedded PDF text first; OCR only pages that need it."""
+
+    def __init__(self) -> None:
+        self._pytesseract = None
+
+    def _load_tesseract(self):
+        if self._pytesseract is not None:
+            return self._pytesseract
+        try:
+            import pytesseract
+        except ImportError as exc:
+            raise OCRConfigurationError(
+                "Scanned pages require pytesseract and the Tesseract OCR executable. "
+                "Install both locally, or use text-based PDFs with an embedded text layer."
+            ) from exc
+        if settings.TESSERACT_CMD:
+            pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_CMD
+        try:
+            pytesseract.get_tesseract_version()
+        except Exception as exc:
+            raise OCRConfigurationError(
+                "Tesseract executable was not found. Install Tesseract OCR and make it "
+                "available on PATH, or set TESSERACT_CMD."
+            ) from exc
+        self._pytesseract = pytesseract
+        return pytesseract
+
+    def _ocr_image(self, image) -> tuple[str, float, list[dict[str, Any]]]:
+        pytesseract = self._load_tesseract()
+        try:
+            from pytesseract import Output
+            data = pytesseract.image_to_data(
+                image,
+                lang=settings.OCR_LANGUAGE,
+                output_type=Output.DICT,
+                config="--psm 6",
+            )
+        except Exception as exc:
+            raise OCRConfigurationError(f"Tesseract could not process this page: {exc}") from exc
+
+        blocks: list[dict[str, Any]] = []
+        words: list[str] = []
+        confidences: list[float] = []
+        for i, raw_text in enumerate(data.get("text", [])):
+            word = str(raw_text).strip()
+            if not word:
+                continue
+            words.append(word)
+            try:
+                confidence = max(0.0, min(1.0, float(data["conf"][i]) / 100.0))
+            except (ValueError, TypeError, KeyError):
+                confidence = 0.0
+            if confidence:
+                confidences.append(confidence)
+            blocks.append({
+                "block_id": len(blocks),
+                "text": word,
+                "confidence": confidence,
+                "bbox": {
+                    "left": data["left"][i], "top": data["top"][i],
+                    "width": data["width"][i], "height": data["height"][i],
+                },
+            })
+        return " ".join(words), (sum(confidences) / len(confidences) if confidences else 0.0), blocks
+
     async def extract_text(self, file_path: str) -> OCRResult:
-        logger.info(f"MockOCR: Processing {file_path}")
-        text = "Mock OCR text containing consultation and medication information. Patient prescribed Amoxicillin 500mg on 2023-10-15."
+        path = Path(file_path)
+        if not path.is_file():
+            raise FileNotFoundError("The uploaded document file could not be found.")
+
+        ext = path.suffix.lower()
+        if ext == ".pdf":
+            return self._extract_pdf(path)
+        if ext in {".png", ".jpg", ".jpeg"}:
+            return self._extract_image(path)
+        raise ValueError("Unsupported document type. Upload PDF, PNG, JPG, or JPEG.")
+
+    def _extract_pdf(self, path: Path) -> OCRResult:
+        import fitz
+        from PIL import Image
+
+        try:
+            document = fitz.open(path)
+        except Exception as exc:
+            raise ValueError("The uploaded PDF could not be opened.") from exc
+        if document.page_count < 1 or document.page_count > settings.OCR_MAX_PAGES:
+            document.close()
+            raise ValueError(f"PDF page count must be between 1 and {settings.OCR_MAX_PAGES}.")
+
+        pages: list[dict[str, Any]] = []
+        for page_index in range(document.page_count):
+            page = document.load_page(page_index)
+            native_text = page.get_text("text").strip()
+            if len(native_text) >= settings.OCR_MIN_TEXT_CHARS:
+                page_text, confidence, blocks = native_text, 1.0, []
+                method = "pdf_text_layer"
+            else:
+                scale = settings.OCR_RENDER_DPI / 72.0
+                pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+                if pix.width * pix.height > 25_000_000:
+                    raise ValueError("Rendered page exceeds the safe OCR pixel limit.")
+                image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                ocr_text, confidence, blocks = self._ocr_image(image)
+                page_text = ocr_text if ocr_text else native_text
+                method = "tesseract" if ocr_text else "pdf_text_layer"
+            pages.append({
+                "page_number": page_index + 1,
+                "text": page_text,
+                "confidence": confidence,
+                "blocks": blocks,
+                "extraction_method": method,
+            })
+        document.close()
+        confidences = [p["confidence"] for p in pages if p["text"].strip()]
+        return OCRResult(
+            text="\n\n".join(p["text"] for p in pages if p["text"].strip()),
+            confidence=sum(confidences) / len(confidences) if confidences else 0.0,
+            pages=pages,
+        )
+
+    def _extract_image(self, path: Path) -> OCRResult:
+        from PIL import Image, ImageOps, UnidentifiedImageError
+        try:
+            with Image.open(path) as source:
+                image = ImageOps.exif_transpose(source).convert("RGB")
+                if image.width * image.height > 25_000_000:
+                    raise ValueError("Image exceeds the safe OCR pixel limit.")
+                text, confidence, blocks = self._ocr_image(image)
+        except UnidentifiedImageError as exc:
+            raise ValueError("The uploaded image is invalid or unsupported.") from exc
         return OCRResult(
             text=text,
-            confidence=0.9,
-            pages=[{"page_number": 1, "text": text, "confidence": 0.9, "blocks": []}]
+            confidence=confidence,
+            pages=[{
+                "page_number": 1, "text": text, "confidence": confidence,
+                "blocks": blocks, "extraction_method": "tesseract",
+            }],
         )
 
-class PaddleOCRProvider(OCRProvider):
-    """Uses PaddleOCR to extract text and bounding boxes from documents."""
-    def __init__(self):
-        # We initialize paddleocr lazily to save startup time
-        self._ocr = None
-    
-    def _get_ocr(self):
-        if self._ocr is None:
-            logger.info("Initializing PaddleOCR...")
-            from paddleocr import PaddleOCR
-            # Using angle classifier and english language
-            self._ocr = PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
-        return self._ocr
 
+class MockOCRProvider(OCRProvider):
+    """Deprecated compatibility name; mock OCR no longer fabricates document text."""
     async def extract_text(self, file_path: str) -> OCRResult:
-        import fitz  # PyMuPDF
-        import numpy as np
-        from PIL import Image
-        import io
-
-        logger.info(f"PaddleOCR processing: {file_path}")
-        ocr = self._get_ocr()
-        
-        ext = os.path.splitext(file_path)[1].lower()
-        pages_data = []
-        full_text = []
-        overall_confidence = 0.0
-        total_blocks = 0
-        
-        try:
-            if ext == '.pdf':
-                doc = fitz.open(file_path)
-                for page_num in range(len(doc)):
-                    page = doc.load_page(page_num)
-                    # Get image of page (resolution 300 DPI for good OCR)
-                    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                    img_array = np.array(img)
-                    
-                    # Run OCR
-                    result = ocr.ocr(img_array, cls=True)
-                    
-                    page_text = []
-                    page_blocks = []
-                    page_conf = 0.0
-                    
-                    if result and result[0]:
-                        for idx, line in enumerate(result[0]):
-                            bbox, (text, conf) = line
-                            page_text.append(text)
-                            page_blocks.append({
-                                "block_id": idx,
-                                "text": text,
-                                "confidence": float(conf),
-                                "bbox": bbox
-                            })
-                            page_conf += float(conf)
-                            
-                        if len(result[0]) > 0:
-                            page_conf /= len(result[0])
-                            
-                    full_page_text = "\n".join(page_text)
-                    pages_data.append({
-                        "page_number": page_num + 1,
-                        "text": full_page_text,
-                        "confidence": page_conf,
-                        "blocks": page_blocks
-                    })
-                    
-                    full_text.append(full_page_text)
-                    overall_confidence += page_conf
-                    total_blocks += 1
-                doc.close()
-            else:
-                # Direct image
-                result = ocr.ocr(file_path, cls=True)
-                page_text = []
-                page_blocks = []
-                page_conf = 0.0
-                
-                if result and result[0]:
-                    for idx, line in enumerate(result[0]):
-                        bbox, (text, conf) = line
-                        page_text.append(text)
-                        page_blocks.append({
-                            "block_id": idx,
-                            "text": text,
-                            "confidence": float(conf),
-                            "bbox": bbox
-                        })
-                        page_conf += float(conf)
-                        
-                    if len(result[0]) > 0:
-                        page_conf /= len(result[0])
-                        
-                full_page_text = "\n".join(page_text)
-                pages_data.append({
-                    "page_number": 1,
-                    "text": full_page_text,
-                    "confidence": page_conf,
-                    "blocks": page_blocks
-                })
-                
-                full_text.append(full_page_text)
-                overall_confidence += page_conf
-                total_blocks += 1
-                
-        except Exception as e:
-            logger.error(f"OCR Error: {e}")
-            raise
-
-        avg_conf = overall_confidence / max(total_blocks, 1)
-        return OCRResult(
-            text="\n\n".join(full_text),
-            confidence=avg_conf,
-            pages=pages_data
+        raise OCRConfigurationError(
+            "Mock OCR was removed because it returned fabricated text. Configure "
+            "OCR_PROVIDER=auto to extract real document contents locally."
         )
+
 
 def get_ocr_provider() -> OCRProvider:
-    provider = getattr(settings, 'OCR_PROVIDER', 'paddle').lower()
-    if provider == 'paddle':
-        try:
-            return PaddleOCRProvider()
-        except ImportError:
-            logger.warning("PaddleOCR not installed, falling back to MockOCRProvider")
-            return MockOCRProvider()
-    return MockOCRProvider()
+    provider = settings.OCR_PROVIDER.lower()
+    if provider in {"auto", "tesseract"}:
+        return LocalDocumentOCR()
+    if provider == "mock":
+        return MockOCRProvider()
+    raise OCRConfigurationError(f"Unsupported OCR_PROVIDER: {provider}")

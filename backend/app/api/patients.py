@@ -12,8 +12,14 @@ from app.db.models.event import HealthEvent
 from app.db.models.signal import Signal
 from app.db.models.medication import Medication
 from app.db.models.investigation import Investigation
-from app.core.security import get_current_user
-from app.schemas.patient import PatientCreate, PatientResponse, PatientSummary
+from app.core.security import get_current_user, require_role
+from app.core.access import assert_patient_access
+from app.schemas.patient import (
+    PatientCreate,
+    PatientResponse,
+    PatientSelfProfileCreate,
+    PatientSummary,
+)
 
 router = APIRouter()
 
@@ -27,20 +33,63 @@ async def list_patients(
     if current_user.role == "ADMIN":
         result = await db.execute(select(Patient).order_by(Patient.last_name))
     else:
+        access_filters = [PatientAccess.user_id == current_user.id]
+        if current_user.role == "PATIENT":
+            access_filters.append(PatientAccess.access_level == "OWNER")
         result = await db.execute(
             select(Patient)
             .join(PatientAccess, PatientAccess.patient_id == Patient.id)
-            .where(PatientAccess.user_id == current_user.id)
+            .where(*access_filters)
             .order_by(Patient.last_name)
         )
     return result.scalars().all()
+
+
+@router.post("/patients/me/profile", response_model=PatientResponse, status_code=201)
+async def create_my_patient_profile(
+    data: PatientSelfProfileCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["PATIENT"])),
+):
+    """Create and link the authenticated patient's own record."""
+    existing = await db.execute(
+        select(Patient.id)
+        .join(PatientAccess, PatientAccess.patient_id == Patient.id)
+        .where(
+            PatientAccess.user_id == current_user.id,
+            PatientAccess.access_level == "OWNER",
+        )
+        .limit(1)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="A patient profile is already linked to this account")
+
+    patient = Patient(
+        id=uuid.uuid4(),
+        first_name=data.first_name,
+        last_name=data.last_name,
+        date_of_birth=data.date_of_birth,
+        gender=data.gender,
+        medical_record_number=f"MG-{uuid.uuid4().hex[:12].upper()}",
+        created_by=current_user.id,
+    )
+    db.add(patient)
+    db.add(PatientAccess(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        user_id=current_user.id,
+        access_level="OWNER",
+        granted_by=current_user.id,
+    ))
+    await db.flush()
+    return patient
 
 
 @router.post("/patients", response_model=PatientResponse, status_code=201)
 async def create_patient(
     data: PatientCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(["ADMIN", "CLINICIAN"])),
 ):
     """Create a new patient."""
     patient = Patient(
@@ -76,6 +125,7 @@ async def get_patient(
     patient = result.scalar_one_or_none()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    await assert_patient_access(patient_id, db, current_user)
     return patient
 
 
@@ -90,6 +140,7 @@ async def get_patient_summary(
     patient = result.scalar_one_or_none()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    await assert_patient_access(patient_id, db, current_user)
 
     doc_count = (await db.execute(
         select(func.count(Document.id)).where(Document.patient_id == patient_id)

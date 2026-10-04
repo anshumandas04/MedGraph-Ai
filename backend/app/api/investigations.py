@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.db.models.user import User
 from app.db.models.investigation import Investigation, InvestigationEvent
 from app.core.security import get_current_user
+from app.core.access import assert_patient_access
 
 router = APIRouter()
 
@@ -19,6 +20,7 @@ async def list_investigations(
     current_user: User = Depends(get_current_user),
 ):
     """List investigations with results over time."""
+    await assert_patient_access(patient_id, db, current_user)
     result = await db.execute(
         select(Investigation)
         .where(Investigation.patient_id == patient_id)

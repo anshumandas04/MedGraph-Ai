@@ -19,7 +19,7 @@ export const InvestigationsPage: React.FC = () => {
 
   if (!selectedPatientId) return <div>Select a patient</div>;
   if (isLoading) return <div className="space-y-4 p-6"><Skeleton className="h-64 w-full" /></div>;
-  if (error || !data) return <ErrorState />;
+  if (error || !data) return <ErrorState error={error} />;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

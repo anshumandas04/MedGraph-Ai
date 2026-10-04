@@ -4,7 +4,7 @@ import { dashboardService } from '../services/dashboard';
 import { usePatient } from '../hooks/usePatient';
 import { StatCard } from '../components/StatCard';
 import { SignalCard } from '../components/SignalCard';
-import { FileText, Activity, Pill, FlaskConical, AlertTriangle } from 'lucide-react';
+import { FileText, Activity, Pill, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { ErrorState } from '../components/ErrorState';
 import { Link } from 'react-router-dom';
@@ -21,7 +21,7 @@ export const DashboardPage: React.FC = () => {
 
   if (!selectedPatientId) return <div className="p-8">Please select a patient.</div>;
   if (isLoading) return <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-6"><Skeleton className="h-32" /><Skeleton className="h-32" /></div>;
-  if (error || !data) return <ErrorState />;
+  if (error || !data) return <ErrorState error={error} />;
 
   return (
     <div className="space-y-8">

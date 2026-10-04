@@ -10,7 +10,7 @@ export const SignalCard: React.FC<{ signal: Signal }> = ({ signal }) => {
     switch (severity) {
       case 'HIGH': return <Badge variant="error">High Severity</Badge>;
       case 'MEDIUM': return <Badge variant="warning">Medium Severity</Badge>;
-      default: return <Badge variant="info">Low Severity</Badge>;
+      default: return <Badge variant="default">Low Severity</Badge>;
     }
   };
 
@@ -34,7 +34,7 @@ export const SignalCard: React.FC<{ signal: Signal }> = ({ signal }) => {
             </div>
             <p className="text-sm text-slate-600 mt-1 line-clamp-2">{signal.description}</p>
             <div className="flex gap-3 mt-3 text-xs text-slate-500">
-              <span>{signal.evidence?.length || 0} evidence pieces</span>
+              <span>{signal.evidence_count ?? signal.evidence?.length ?? 0} evidence pieces</span>
               <span>{Math.round((signal.confidence || 0) * 100)}% confidence</span>
               <Badge variant="outline">{signal.status}</Badge>
             </div>

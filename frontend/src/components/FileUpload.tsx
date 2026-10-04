@@ -1,18 +1,21 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { UploadCloud } from 'lucide-react';
 
 interface FileUploadProps {
-  onFileSelect: (file: File) => void;
+  onFilesSelect: (files: File[]) => void;
+  disabled?: boolean;
   accept?: string;
 }
 
-export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, accept = ".pdf,.jpg,.jpeg,.png" }) => {
+export const FileUpload: React.FC<FileUploadProps> = ({ onFilesSelect, disabled = false, accept = ".pdf,.jpg,.jpeg,.png" }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      onFileSelect(e.dataTransfer.files[0]);
+    if (!disabled && e.dataTransfer.files.length > 0) {
+      onFilesSelect(Array.from(e.dataTransfer.files));
     }
-  }, [onFileSelect]);
+  }, [disabled, onFilesSelect]);
 
   const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -20,27 +23,41 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, accept = "
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      onFileSelect(e.target.files[0]);
+      onFilesSelect(Array.from(e.target.files));
     }
+    // Allow selecting the same file again after a failed upload.
+    e.target.value = '';
   };
 
   return (
     <div 
-      className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:bg-slate-50 transition-colors cursor-pointer"
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          inputRef.current?.click();
+        }
+      }}
+      className={`border-2 border-dashed border-slate-300 rounded-lg p-8 text-center transition-colors ${disabled ? 'cursor-wait opacity-60' : 'hover:bg-slate-50 cursor-pointer'}`}
       onDrop={onDrop}
       onDragOver={onDragOver}
-      onClick={() => document.getElementById('file-upload')?.click()}
+      onClick={() => !disabled && inputRef.current?.click()}
     >
       <input 
         id="file-upload" 
+        ref={inputRef}
         type="file" 
         className="hidden" 
         accept={accept}
+        multiple
+        disabled={disabled}
         onChange={handleFileInput}
       />
       <UploadCloud className="w-10 h-10 text-primary-500 mx-auto mb-4" />
-      <h4 className="text-sm font-medium text-slate-900 mb-1">Click to upload or drag and drop</h4>
-      <p className="text-xs text-slate-500">PDF, JPG, PNG (Max 10MB)</p>
+      <h4 className="text-sm font-medium text-slate-900 mb-1">Click to choose files or drag and drop</h4>
+      <p className="text-xs text-slate-500">Select or drop multiple PDF, JPG, or PNG files (max 50MB each)</p>
     </div>
   );
 };

@@ -7,7 +7,9 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     full_name: str
-    role: str
+    # Public registration always creates a least-privileged patient account.
+    # The API also ignores any client-supplied role value.
+    role: str = "PATIENT"
 
 class LoginRequest(BaseModel):
     email: str

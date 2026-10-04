@@ -5,7 +5,7 @@ import { signalsService } from '../services/signals';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { EvidenceItem } from '../components/EvidenceItem';
-import { ArrowLeft, Check, X, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const SignalDetailPage: React.FC = () => {

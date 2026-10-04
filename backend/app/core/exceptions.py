@@ -1,5 +1,6 @@
 from fastapi import Request, FastAPI
 from fastapi.responses import JSONResponse
+import logging
 from typing import Dict, Any, Optional
 
 class MedGraphException(Exception):
@@ -28,6 +29,7 @@ class PatientNotFoundError(MedGraphException):
 def register_exception_handlers(app: FastAPI):
     @app.exception_handler(MedGraphException)
     async def medgraph_exception_handler(request: Request, exc: MedGraphException):
+        request_id = getattr(request.state, "request_id", None)
         return JSONResponse(
             status_code=exc.status_code,
             content={
@@ -35,6 +37,29 @@ def register_exception_handlers(app: FastAPI):
                     "code": exc.code,
                     "message": exc.message,
                     "details": exc.details
-                }
-            }
+                },
+                "request_id": request_id,
+            },
+            headers={"X-Request-ID": request_id} if request_id else None,
+        )
+
+    @app.exception_handler(Exception)
+    async def unexpected_exception_handler(request: Request, exc: Exception):
+        request_id = getattr(request.state, "request_id", None)
+        logging.getLogger("medgraph.errors").error(
+            "Unhandled request exception",
+            extra={"exception_type": type(exc).__name__},
+        )
+        headers = {"X-Request-ID": request_id} if request_id else None
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "The server could not complete this request.",
+                    "details": {},
+                },
+                "request_id": request_id,
+            },
+            headers=headers,
         )

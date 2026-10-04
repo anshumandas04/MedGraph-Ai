@@ -1,6 +1,7 @@
 """Events API routes."""
 import uuid
 from typing import Optional
+from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,7 @@ from app.db.session import get_db
 from app.db.models.user import User
 from app.db.models.event import HealthEvent, EventRelationship
 from app.core.security import get_current_user
+from app.core.access import assert_patient_access
 
 router = APIRouter()
 
@@ -17,13 +19,14 @@ router = APIRouter()
 async def list_events(
     patient_id: uuid.UUID,
     event_type: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    document_id: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    document_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """List events for a patient with optional filters."""
+    await assert_patient_access(patient_id, db, current_user)
     query = select(HealthEvent).where(HealthEvent.patient_id == patient_id)
 
     if event_type:
@@ -71,6 +74,7 @@ async def get_event(
     event = result.scalar_one_or_none()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    await assert_patient_access(event.patient_id, db, current_user)
 
     # Get relationships
     rel_result = await db.execute(
@@ -116,6 +120,11 @@ async def get_event_relationships(
     current_user: User = Depends(get_current_user),
 ):
     """Get event relationships."""
+    event_result = await db.execute(select(HealthEvent).where(HealthEvent.id == event_id))
+    event = event_result.scalar_one_or_none()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    await assert_patient_access(event.patient_id, db, current_user)
     result = await db.execute(
         select(EventRelationship).where(
             (EventRelationship.source_event_id == event_id) |

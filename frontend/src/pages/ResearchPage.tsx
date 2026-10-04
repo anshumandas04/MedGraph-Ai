@@ -22,7 +22,7 @@ export const ResearchPage: React.FC = () => {
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">Research Dashboard</h2>
-        <p className="text-slate-500 mt-1">System performance and evaluation metrics on synthetic datasets.</p>
+        <p className="text-slate-500 mt-1">Pipeline and evaluation metrics for the currently selected dataset.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -35,26 +35,12 @@ export const ResearchPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Pipeline Evaluation (Synthetic Benchmark)</CardTitle>
+            <CardTitle>Evaluation metrics</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-8 text-center py-8">
-              <div>
-                <div className="text-4xl font-bold text-primary-600 mb-2">{(evalData?.f1 || 0).toFixed(2)}</div>
-                <div className="text-sm font-medium text-slate-500">Overall F1 Score</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold text-emerald-600 mb-2">{(evalData?.precision || 0).toFixed(2)}</div>
-                <div className="text-sm font-medium text-slate-500">Precision</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold text-blue-600 mb-2">{(evalData?.recall || 0).toFixed(2)}</div>
-                <div className="text-sm font-medium text-slate-500">Recall</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold text-amber-600 mb-2">{(evalData?.evidence_accuracy || 0).toFixed(2)}</div>
-                <div className="text-sm font-medium text-slate-500">Evidence Accuracy</div>
-              </div>
+            <div className="py-8 text-center">
+              <p className="font-medium text-slate-700">{evalData?.available ? "Validated evaluation results are available." : "Evaluation scores are unavailable."}</p>
+              <p className="mt-2 text-sm text-slate-500">{evalData?.note || "Human-adjudicated reference labels are required before reporting accuracy."}</p>
             </div>
           </CardContent>
         </Card>

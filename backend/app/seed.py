@@ -3,6 +3,7 @@ MedGraph Database Seeder
 Creates demo users, patient, documents, events, medications, investigations, and signals.
 Idempotent — skips if data already exists.
 """
+import os
 import uuid
 from datetime import date, datetime, timezone
 
@@ -284,6 +285,11 @@ DOCUMENTS = [
 
 def seed_db():
     """Seed the database with demo data. Idempotent."""
+    if not settings.DEMO_MODE:
+        raise SystemExit("Refusing to seed synthetic demo records while DEMO_MODE is false.")
+    demo_password = os.environ.get("DEMO_SEED_PASSWORD", "")
+    if len(demo_password) < 14:
+        raise SystemExit("Set a disposable DEMO_SEED_PASSWORD of at least 14 characters before seeding.")
     print("🔗 Connecting to database...")
     engine = create_engine(settings.DATABASE_URL_SYNC, echo=False)
 
@@ -304,22 +310,22 @@ def seed_db():
         print("👤 Creating demo users...")
         admin = User(
             id=uuid.uuid4(), email="admin@medgraph.dev",
-            hashed_password=hash_password("MedGraph2026!"),
+            hashed_password=hash_password(demo_password),
             full_name="Admin User", role="ADMIN",
         )
         clinician = User(
             id=uuid.uuid4(), email="clinician@medgraph.dev",
-            hashed_password=hash_password("MedGraph2026!"),
+            hashed_password=hash_password(demo_password),
             full_name="Dr. Sarah Mitchell", role="CLINICIAN",
         )
         patient_user = User(
             id=uuid.uuid4(), email="patient@medgraph.dev",
-            hashed_password=hash_password("MedGraph2026!"),
+            hashed_password=hash_password(demo_password),
             full_name="Patient User", role="PATIENT",
         )
         caregiver = User(
             id=uuid.uuid4(), email="caregiver@medgraph.dev",
-            hashed_password=hash_password("MedGraph2026!"),
+            hashed_password=hash_password(demo_password),
             full_name="Caregiver User", role="CAREGIVER",
         )
         session.add_all([admin, clinician, patient_user, caregiver])
@@ -344,7 +350,11 @@ def seed_db():
                 id=uuid.uuid4(),
                 patient_id=patient.id,
                 user_id=user.id,
-                access_level="ADMIN" if user.role == "ADMIN" else "READ",
+                access_level=(
+                    "ADMIN" if user.role == "ADMIN"
+                    else "OWNER" if user.role == "PATIENT"
+                    else "READ"
+                ),
                 granted_by=admin.id,
             ))
         session.flush()

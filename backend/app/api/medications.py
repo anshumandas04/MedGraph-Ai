@@ -9,6 +9,7 @@ from app.db.models.user import User
 from app.db.models.medication import Medication, MedicationEvent
 from app.db.models.event import HealthEvent
 from app.core.security import get_current_user
+from app.core.access import assert_patient_access
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ async def list_medications(
     current_user: User = Depends(get_current_user),
 ):
     """List medications for a patient with event history."""
+    await assert_patient_access(patient_id, db, current_user)
     result = await db.execute(
         select(Medication)
         .where(Medication.patient_id == patient_id)

@@ -7,13 +7,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Input, Label } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Alert } from '../components/ui/Alert';
-import { Select } from '../components/ui/Select';
 
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   full_name: z.string().min(2),
-  role: z.enum(['PATIENT', 'CAREGIVER', 'CLINICIAN', 'ADMIN']),
 });
 
 type RegisterForm = z.infer<typeof registerSchema>;
@@ -25,7 +23,7 @@ export const RegisterPage: React.FC = () => {
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { role: 'CLINICIAN' }
+    defaultValues: {}
   });
 
   const onSubmit = async (data: RegisterForm) => {
@@ -53,20 +51,7 @@ export const RegisterPage: React.FC = () => {
           <Label htmlFor="password">Password</Label>
           <Input id="password" type="password" {...register('password')} error={errors.password?.message} />
         </div>
-        <div>
-          <Label htmlFor="role">Role</Label>
-          <Select 
-            id="role" 
-            {...register('role')} 
-            error={errors.role?.message}
-            options={[
-              { value: 'CLINICIAN', label: 'Clinician' },
-              { value: 'PATIENT', label: 'Patient' },
-              { value: 'CAREGIVER', label: 'Caregiver' },
-              { value: 'ADMIN', label: 'Researcher / Admin' },
-            ]}
-          />
-        </div>
+        <p className="text-xs text-slate-500">New accounts start with the Patient role. After registration, complete your profile to create the health record linked only to your account.</p>
         <Button type="submit" className="w-full" isLoading={isSubmitting}>Register</Button>
       </form>
       <div className="text-center text-sm">

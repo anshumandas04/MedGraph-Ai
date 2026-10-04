@@ -7,8 +7,9 @@ from app.db.base import Base, UUIDMixin
 
 from sqlalchemy import JSON
 
-import os
-if "postgresql" in os.getenv("DATABASE_URL", ""):
+from app.core.config import settings
+
+if "postgresql" in settings.DATABASE_URL:
     from pgvector.sqlalchemy import Vector
     EmbeddingType = Vector(1536)
 else:

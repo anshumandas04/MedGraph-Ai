@@ -22,6 +22,7 @@ import { AskMedGraphPage } from '../pages/AskMedGraphPage';
 import { ResearchPage } from '../pages/ResearchPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
+import { DiagnosticsPage } from '../pages/DiagnosticsPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -30,6 +31,13 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   
   return <PatientProvider>{children}</PatientProvider>;
+};
+
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <div className="h-screen flex items-center justify-center">Loading...</div>;
+  if (user?.role !== 'ADMIN') return <Navigate to="/app/dashboard" replace />;
+  return <>{children}</>;
 };
 
 export default function AppRoutes() {
@@ -54,7 +62,8 @@ export default function AppRoutes() {
         <Route path="medications" element={<MedicationsPage />} />
         <Route path="investigations" element={<InvestigationsPage />} />
         <Route path="ask" element={<AskMedGraphPage />} />
-        <Route path="research" element={<ResearchPage />} />
+        <Route path="research" element={<AdminRoute><ResearchPage /></AdminRoute>} />
+        <Route path="diagnostics" element={<AdminRoute><DiagnosticsPage /></AdminRoute>} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 

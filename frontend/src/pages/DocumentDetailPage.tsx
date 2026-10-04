@@ -16,6 +16,7 @@ export const DocumentDetailPage: React.FC = () => {
     queryKey: ['document', id],
     queryFn: () => documentsService.getDocument(id!),
     enabled: !!id,
+    refetchInterval: (query) => ['UPLOADED', 'QUEUED', 'PROCESSING'].includes(query.state.data?.processing_status ?? '') ? 2000 : false,
   });
 
   const { data: events, isLoading: eventsLoading } = useQuery({
@@ -25,6 +26,7 @@ export const DocumentDetailPage: React.FC = () => {
       return import('../services/events').then(m => m.eventsService.getEvents(doc!.patient_id, { documentId: id! }));
     },
     enabled: !!doc?.patient_id && !!id,
+    refetchInterval: () => doc && ['UPLOADED', 'QUEUED', 'PROCESSING'].includes(doc.processing_status) ? 2000 : false,
   });
 
   const reprocessMutation = useMutation({
@@ -52,6 +54,8 @@ export const DocumentDetailPage: React.FC = () => {
           Reprocess
         </Button>
       </div>
+      {doc.processing_error && <div role="status" className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{doc.processing_error}</div>}
+      {reprocessMutation.isError && <div role="alert" className="text-sm text-red-700">Could not queue reprocessing. Verify your access and the backend status.</div>}
 
       <div className="flex-1 flex gap-6 min-h-0">
         <div className="w-1/2 flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden">

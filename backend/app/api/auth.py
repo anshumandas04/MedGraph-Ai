@@ -28,7 +28,8 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         email=data.email,
         hashed_password=hash_password(data.password),
         full_name=data.full_name,
-        role=data.role,
+        # Public registration must never grant elevated privileges based on client input.
+        role="PATIENT",
     )
     db.add(user)
     await db.flush()
